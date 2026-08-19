@@ -27,7 +27,7 @@ make install    # symlinks it into ~/.local/bin
 make clean
 ```
 
-No tests; the compiler flags (`-std=c99 -pedantic -Wall -Wextra`) are the
+No tests; the compiler flags (`-std=c11 -pedantic -Wall -Wextra`) are the
 lint. Keep the build warning-free. `fzf` is a runtime dependency.
 `vendor/stb_ds.h` provides the dynamic arrays for the item/match lists.
 
@@ -74,6 +74,6 @@ keyboard. XTEST fake keys work against the grab for scripted checks.
 
 ## Style
 
-Follows suckless/OpenBSD C style like htray: C99, tabs, return type on its
+Follows suckless/OpenBSD C style like htray: C11, tabs, return type on its
 own line, fixed-size buffers with `snprintf`, no dynamic allocation beyond
 stb_ds. Match it.
