@@ -42,6 +42,10 @@
 
 #include "config.h"
 
+#ifndef HMENU_VERSION
+#define HMENU_VERSION "dev"
+#endif
+
 #define LEN(a) (sizeof(a) / sizeof((a)[0]))
 
 static Display *dpy;
@@ -80,7 +84,7 @@ usage(void)
 	size_t i;
 
 	fputs("usage: hmenu [mode|listcmd]...\n"
-	      "       hmenu -l | -d | -a windowid\nmodes:", stderr);
+	      "       hmenu -l | -d | -a windowid | -v\nmodes:", stderr);
 	for (i = 0; i < LEN(modes); i++)
 		fprintf(stderr, " %s", modes[i].name);
 	fputs("\n", stderr);
@@ -839,6 +843,10 @@ main(int argc, char *argv[])
 			return listapps();
 		if (!strcmp(argv[1], "-a") && argc == 3)
 			return activatewindow(argv[2]);
+		if (!strcmp(argv[1], "-v") && argc == 2) {
+			printf("hmenu %s\n", HMENU_VERSION);
+			return 0;
+		}
 		usage();
 	}
 	/* sources are appended in order; with an empty query the list
