@@ -1,0 +1,4 @@
+hmenu
+*.o
+.hedlog
+tags
