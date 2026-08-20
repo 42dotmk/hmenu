@@ -74,6 +74,7 @@ keyboard. XTEST fake keys work against the grab for scripted checks.
 
 ## Style
 
-Follows suckless/OpenBSD C style like htray: C11, tabs, return type on its
-own line, fixed-size buffers with `snprintf`, no dynamic allocation beyond
-stb_ds. Match it.
+Suckless/OpenBSD C conventions like htray — C11, fixed-size buffers with
+`snprintf`, no dynamic allocation beyond stb_ds — formatted by clang-format
+via the repo's `.clang-format` (shared across the siblings: 4-space indent,
+attached braces, 80 columns). Run `clang-format -i` on files you touch.
