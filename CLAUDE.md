@@ -14,10 +14,25 @@ like interactive fzf. Return executes the selected line via `sh -c` (or the
 typed text verbatim when nothing matches), Shift+Return wraps it in
 `terminal -e sh -c line` (st-style `-e`), Escape/Ctrl-C cancels.
 
-Suckless-style: configuration lives in `config.h` (included by `hmenu.c`),
-not a runtime config file. The first block of settings can additionally be
-overridden at startup by `HMENU_*` environment variables; each setting's
-comment names its variable, and `loadconfig()` applies them.
+Configuration is layered (see `loadconfig()`), weakest first:
+
+1. `config.h` (included by `hmenu.c`) — the compiled-in defaults and the
+   source of truth for what exists; each setting's comment names its
+   `[conf key]` and `HMENU_*` variable.
+2. `~/.config/hackable/hmenu.conf`, read by `vendor/hconf.h` — a tiny
+   `key = value` reader vendored like `stb_ds.h` and meant to be shared
+   by the sibling tools (hmenu is the pilot). `[mode <name>]` sections
+   add or override entries of `modes[]` (keys `cmd`, `fallback`); `args`
+   replaces `defargs[]`. Values are raw (no quoting/escapes; the
+   display/action separator is a literal tab), `\` at end of line
+   continues a value.
+3. `HMENU_*` environment variables — per-invocation, strongest.
+
+Errors never stop hmenu: unparsable lines, unknown keys (checked against
+`knownkeys[]`) and bad numbers become `hconf_diag()` warnings on stderr
+and the defaults stay; `hmenu --check` prints the same diagnostics plus
+the resulting mode list and exits 0/1 — run it after editing the file.
+A `[mode x]` without a `cmd` is dropped with a warning.
 
 ## Build
 
@@ -52,11 +67,10 @@ keyboard. XTEST fake keys work against the grab for scripted checks.
   Terminal=true lines in `terminal -e sh -c` (shell-quoted by
   `shquote()`).
 - `filter()` forks `fzf --filter <input>` per keystroke and splits its
-  ranked stdout into `matches`; `fallbackrow()` then prepends the mode's
-  `fallback` line (query substituted: as typed in the display part,
-  shell-quoted in the action part) so the query itself is always the first
-  choice — `hist` uses it to search in hweb; Ctrl+Return runs that row
-  from anywhere; an empty query short-circuits to the full
+  ranked stdout into `matches`; when that is empty `fallbackrow()` puts
+  the mode's `fallback` line there instead (query substituted: as typed in
+  the display part, shell-quoted in the action part), and Ctrl+Return runs
+  that line from anywhere — `run` and `hist` use it to search in hweb; an empty query short-circuits to the full
   list. fzf exiting 127 (not found) is fatal, exiting 1 (no match) just
   means an empty list.
 - `keypress()` uses `Xutf8LookupString` (XIM when available) for text

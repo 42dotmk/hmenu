@@ -40,7 +40,13 @@
 #define STB_DS_IMPLEMENTATION
 #include <stb_ds.h>
 
+#define HCONF_IMPLEMENTATION
+#include <hconf.h>
+
 #include "config.h"
+
+static struct mode *allmodes; /* modes[] + the conf file's [mode x] */
+static const char **runargs;  /* bare-invocation sources: args key or defargs */
 
 #ifndef HMENU_VERSION
 #define HMENU_VERSION "dev"
@@ -71,17 +77,18 @@ static const char *fallback;          /* first given mode's, see config.h */
 static char fbline[sizeof input * 6]; /* the fallback row for this query */
 static void shquote(char *dst, size_t size, const char *s);
 
-/* the synthetic first row a mode's fallback adds while a query is typed:
- * the template's display part gets the query as typed, the action part
- * gets it shell-quoted */
+/* the mode's fallback line for this query (the template's display part
+ * gets the query as typed, the action part gets it shell-quoted): shown as
+ * the only row when nothing matches, run by Ctrl+Return from anywhere */
 static void fallbackrow(void) {
     char q[sizeof input * 4 + 2], disp[sizeof input + 256];
-    const char *t = strchr(fallback, '\t');
+    const char *t;
     size_t n;
 
     fbline[0] = 0;
     if (!fallback || !input[0])
         return;
+    t = strchr(fallback, '\t');
     shquote(q, sizeof q, input);
     if (t) {
         char tmpl[256];
@@ -92,7 +99,8 @@ static void fallbackrow(void) {
         snprintf(fbline + n + 1, sizeof fbline - n - 1, t + 1, q);
     } else
         snprintf(fbline, sizeof fbline, fallback, q);
-    arrins(matches, 0, fbline);
+    if (!arrlen(matches))
+        arrput(matches, fbline);
 }
 static int cursor;   /* byte offset into input */
 static int sel, off; /* selected match, first visible match */
@@ -107,10 +115,10 @@ static void usage(void) {
     size_t i;
 
     fputs("usage: hmenu [mode|listcmd]...\n"
-          "       hmenu -l | -d | -a windowid | -v\nmodes:",
+          "       hmenu -l | -d | -a windowid | -v | --check\nmodes:",
           stderr);
-    for (i = 0; i < LEN(modes); i++)
-        fprintf(stderr, " %s", modes[i].name);
+    for (i = 0; i < (size_t)arrlen(allmodes); i++)
+        fprintf(stderr, " %s", allmodes[i].name);
     fputs("\n", stderr);
     exit(1);
 }
@@ -134,8 +142,93 @@ static void envstr(const char *name, const char **dst) {
         *dst = s;
 }
 
-/* apply HMENU_* environment overrides to the config.h defaults */
+/* configuration, three layers: config.h defaults, overlaid by the
+ * hconf file (~/.config/hackable/hmenu.conf), overlaid by HMENU_*
+ * environment variables - per-invocation beats the file */
+static const char *const knownkeys[] = {
+    "font",     "fontsize", "bg",   "fg",         "selbg",
+    "selfg",    "prompt",   "dim",  "border",     "width",
+    "lines",    "borderpx", "hpad", "vpad",       "linepad",
+    "terminal", "fzf",      "args", "mode *.cmd", "mode *.fallback",
+};
+
+static void cfgstr(const char *key, const char **dst) {
+    const char *v = hconf_get("", key);
+
+    if (v)
+        *dst = v;
+}
+
+static void cfguint(const char *key, unsigned int *dst) {
+    long v = hconf_int("", key, *dst);
+
+    if (v >= 0)
+        *dst = (unsigned int)v;
+}
+
+/* the built-in modes[], overlaid/extended by [mode name] sections; the
+ * args key replaces defargs[] as what a bare `hmenu` shows */
+static void confmodes(void) {
+    const char *sec, *key, *val, *v;
+    ptrdiff_t k;
+    size_t i;
+    int n;
+
+    for (i = 0; i < LEN(modes); i++)
+        arrput(allmodes, modes[i]);
+    for (n = 0; n < hconf_count(); n++) {
+        hconf_entry(n, &sec, &key, &val);
+        if (strncmp(sec, "mode ", 5) || !sec[5])
+            continue;
+        for (k = 0; k < arrlen(allmodes); k++)
+            if (!strcmp(allmodes[k].name, sec + 5))
+                break;
+        if (k == arrlen(allmodes)) {
+            struct mode m = {sec + 5, NULL, NULL};
+            arrput(allmodes, m);
+        }
+        if (!strcmp(key, "cmd"))
+            allmodes[k].cmd = val;
+        else if (!strcmp(key, "fallback"))
+            allmodes[k].fallback = val;
+        /* other keys are hconf_check's business */
+    }
+    for (k = arrlen(allmodes) - 1; k >= 0; k--)
+        if (!allmodes[k].cmd) {
+            fprintf(stderr, "hmenu: [mode %s] has no cmd, dropped\n",
+                    allmodes[k].name);
+            arrdel(allmodes, k);
+        }
+    if ((v = hconf_get("", "args"))) {
+        char *dup = strdup(v), *tok; /* tokens point into dup, kept */
+        for (tok = strtok(dup, " \t"); tok; tok = strtok(NULL, " \t"))
+            arrput(runargs, tok);
+    } else
+        for (i = 0; i < LEN(defargs); i++)
+            arrput(runargs, defargs[i]);
+}
+
 static void loadconfig(void) {
+    hconf_load("hmenu");
+    cfgstr("font", &fontname);
+    cfguint("fontsize", &fontsize);
+    cfgstr("bg", &col_bg);
+    cfgstr("fg", &col_fg);
+    cfgstr("selbg", &col_selbg);
+    cfgstr("selfg", &col_selfg);
+    cfgstr("prompt", &col_prompt);
+    cfgstr("dim", &col_dim);
+    cfgstr("border", &col_border);
+    cfguint("width", &menuw);
+    cfguint("lines", &lines);
+    cfguint("borderpx", &borderw);
+    cfguint("hpad", &hpad);
+    cfguint("vpad", &vpad);
+    cfguint("linepad", &linepad);
+    cfgstr("terminal", &terminal);
+    cfgstr("fzf", &fzfcmd);
+    confmodes();
+    hconf_check(knownkeys, (int)LEN(knownkeys));
     envstr("HMENU_FONT", &fontname);
     envuint("HMENU_FONTSIZE", &fontsize);
     envstr("HMENU_BG", &col_bg);
@@ -149,6 +242,25 @@ static void loadconfig(void) {
     envuint("HMENU_LINES", &lines);
     envuint("HMENU_BORDERPX", &borderw);
     envstr("HMENU_TERMINAL", &terminal);
+}
+
+/* --check: parse + validate the conf file, list the modes, no window */
+static int checkconfig(void) {
+    ptrdiff_t k;
+
+    if (hconf_path()[0])
+        printf("config: %s\n", hconf_path());
+    else
+        printf("config: none (config.h defaults + HMENU_* env)\n");
+    if (hconf_diag()[0]) {
+        fputs(hconf_diag(), stdout);
+        return 1;
+    }
+    printf("ok, modes:");
+    for (k = 0; k < arrlen(allmodes); k++)
+        printf(" %s", allmodes[k].name);
+    printf("\n");
+    return 0;
 }
 
 /* byte offset of the previous/next utf8 character boundary */
@@ -812,11 +924,11 @@ static void loadsource(const char *arg) {
 
     if (arg[0] == '-')
         usage();
-    for (i = 0; i < LEN(modes); i++)
-        if (!strcmp(arg, modes[i].name)) {
-            loadlist(modes[i].cmd);
+    for (i = 0; i < (size_t)arrlen(allmodes); i++)
+        if (!strcmp(arg, allmodes[i].name)) {
+            loadlist(allmodes[i].cmd);
             if (!fallback)
-                fallback = modes[i].fallback;
+                fallback = allmodes[i].fallback;
             return;
         }
     loadlist(arg);
@@ -838,15 +950,19 @@ int main(int argc, char *argv[]) {
             printf("hmenu %s\n", HMENU_VERSION);
             return 0;
         }
+        if (!strcmp(argv[1], "--check") && argc == 2)
+            return checkconfig();
         usage();
     }
+    if (hconf_diag()[0]) /* bad conf: warn, run on the defaults */
+        fputs(hconf_diag(), stderr);
     /* sources are appended in order; with an empty query the list
      * shows them exactly that way, unsorted */
     for (a = 1; a < argc; a++)
         loadsource(argv[a]);
     if (argc < 2)
-        for (a = 0; a < (int)LEN(defargs); a++)
-            loadsource(defargs[a]);
+        for (a = 0; a < (int)arrlen(runargs); a++)
+            loadsource(runargs[a]);
     arrput(listbuf, '\0');
     splitlines(listbuf, &items);
     setup();

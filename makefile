@@ -14,7 +14,7 @@ BINDIR  = $(HOME)/.local/bin
 
 all: hmenu
 
-hmenu: hmenu.c config.h vendor/stb_ds.h
+hmenu: hmenu.c config.h vendor/stb_ds.h vendor/hconf.h
 	$(CC) $(CFLAGS) -o $@ hmenu.c $(LDLIBS)
 
 install: hmenu
