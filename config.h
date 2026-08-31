@@ -48,6 +48,10 @@ static const struct mode {
      "{ IFS=:; for d in $PATH; do [ -d \"$d\" ] && ls -1 \"$d\"; done; "
      "} 2>/dev/null | sort -u",
      NULL},
+    {"pass", /* password-store entries; Return copies via `pass -c` */
+     "cd ~/.password-store && find . -name '*.gpg' -not -path './.git/*' | "
+     "sed 's|^\\./||;s|\\.gpg$||' | sort -f | sed \"s/.*/&\\tpass -c '&'/\"",
+     NULL},
     {"hist", /* hweb history, newest first, one entry per url; Return opens
               * the url in a new hweb window, anything else typed is searched */
      "tac \"${XDG_DATA_HOME:-$HOME/.local/share}/hweb/history\" 2>/dev/null | "
