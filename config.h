@@ -42,6 +42,12 @@ static const struct mode {
     {"app", "hmenu -d | sort -f"}, /* XDG desktop applications */
     {"run", "{ IFS=:; for d in $PATH; do [ -d \"$d\" ] && ls -1 \"$d\"; done; "
             "} 2>/dev/null | sort -u"},
+    {"hist", /* hweb history, newest first, one entry per url; Return opens
+              * the url in a new hweb window */
+     "tac \"${XDG_DATA_HOME:-$HOME/.local/share}/hweb/history\" 2>/dev/null | "
+     "awk -F'\\t' '!seen[$1]++ { u=$1; gsub(/[\"\\\\$`]/, \"\\\\\\\\&\", u); "
+     "printf \"%s  %s\\thweb \\\"%s\\\"\\n\", ($2 != \"\" ? $2 : $1), ($2 != "
+     "\"\" ? $1 : \"\"), u }'"},
     /* { "scripts", "ls -1 ~/bin" }, */
 };
 

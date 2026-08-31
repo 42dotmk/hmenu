@@ -13,6 +13,7 @@ cancels. If nothing matches, Return runs what you typed.
 ```sh
 hmenu                 # the default modes from config.h: win, app, run
 hmenu app             # a mode by name (XDG desktop applications)
+hmenu hist            # hweb browsing history; Return opens the url in hweb
 hmenu 'ls ~/scripts'  # any command; its output lines become the items
 ```
 
