@@ -52,7 +52,11 @@ keyboard. XTEST fake keys work against the grab for scripted checks.
   Terminal=true lines in `terminal -e sh -c` (shell-quoted by
   `shquote()`).
 - `filter()` forks `fzf --filter <input>` per keystroke and splits its
-  ranked stdout into `matches`; an empty query short-circuits to the full
+  ranked stdout into `matches`; `fallbackrow()` then prepends the mode's
+  `fallback` line (query substituted: as typed in the display part,
+  shell-quoted in the action part) so the query itself is always the first
+  choice — `hist` uses it to search in hweb; Ctrl+Return runs that row
+  from anywhere; an empty query short-circuits to the full
   list. fzf exiting 127 (not found) is fatal, exiting 1 (no match) just
   means an empty list.
 - `keypress()` uses `Xutf8LookupString` (XIM when available) for text

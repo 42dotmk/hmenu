@@ -33,21 +33,28 @@ static const char *fzfcmd =
  * Commands run through `sh -c` and print one item per line; the chosen
  * line is executed with `sh -c` (Return) or in the terminal (Shift+Return).
  * A tab in a line splits display from action: the part before it is shown
- * and matched, the part after it is executed (see `hmenu -l`). */
+ * and matched, the part after it is executed (see `hmenu -l`). A mode's
+ * optional fallback is a line template shown as an extra first row while
+ * a query is typed (Ctrl+Return runs it from anywhere): %s in its display
+ * part is the query as typed, in its action part the query shell-quoted. */
 static const struct mode {
     const char *name;
     const char *cmd;
+    const char *fallback;
 } modes[] = {
-    {"win", "hmenu -l"},           /* open windows; Return activates via -a */
-    {"app", "hmenu -d | sort -f"}, /* XDG desktop applications */
-    {"run", "{ IFS=:; for d in $PATH; do [ -d \"$d\" ] && ls -1 \"$d\"; done; "
-            "} 2>/dev/null | sort -u"},
+    {"win", "hmenu -l", NULL}, /* open windows; Return activates via -a */
+    {"app", "hmenu -d | sort -f", NULL}, /* XDG desktop applications */
+    {"run",
+     "{ IFS=:; for d in $PATH; do [ -d \"$d\" ] && ls -1 \"$d\"; done; "
+     "} 2>/dev/null | sort -u",
+     NULL},
     {"hist", /* hweb history, newest first, one entry per url; Return opens
-              * the url in a new hweb window */
+              * the url in a new hweb window, anything else typed is searched */
      "tac \"${XDG_DATA_HOME:-$HOME/.local/share}/hweb/history\" 2>/dev/null | "
      "awk -F'\\t' '!seen[$1]++ { u=$1; gsub(/[\"\\\\$`]/, \"\\\\\\\\&\", u); "
      "printf \"%s  %s\\thweb \\\"%s\\\"\\n\", ($2 != \"\" ? $2 : $1), ($2 != "
-     "\"\" ? $1 : \"\"), u }'"},
+     "\"\" ? $1 : \"\"), u }'",
+     "search: %s\thweb %s"},
     /* { "scripts", "ls -1 ~/bin" }, */
 };
 

@@ -8,12 +8,15 @@ A centered window with a typed filter and a vertical list. Type to
 filter (exactly fzf's matching — it *is* fzf, run with `--filter` on
 every keystroke), Return runs the selected line with `sh -c`,
 Shift+Return runs it in a terminal (`hterm -e sh -c ...`), Escape
-cancels. If nothing matches, Return runs what you typed.
+cancels. If nothing matches, Return runs what you typed. Modes with a
+fallback (like `hist`) add a first row that runs the fallback with what you
+typed (Ctrl+Return runs it from anywhere).
 
 ```sh
 hmenu                 # the default modes from config.h: win, app, run
 hmenu app             # a mode by name (XDG desktop applications)
-hmenu hist            # hweb browsing history; Return opens the url in hweb
+hmenu hist            # hweb browsing history; Return opens the url in hweb,
+                      # anything else typed is searched in hweb
 hmenu 'ls ~/scripts'  # any command; its output lines become the items
 ```
 

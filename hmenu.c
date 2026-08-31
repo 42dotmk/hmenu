@@ -67,6 +67,33 @@ static char *fbuf;     /* stb_ds char array: last fzf output */
 static char **matches; /* stb_ds: current matches (into listbuf/fbuf) */
 static FILE *listfile; /* raw list again, stdin for fzf */
 static char input[1024];
+static const char *fallback;          /* first given mode's, see config.h */
+static char fbline[sizeof input * 6]; /* the fallback row for this query */
+static void shquote(char *dst, size_t size, const char *s);
+
+/* the synthetic first row a mode's fallback adds while a query is typed:
+ * the template's display part gets the query as typed, the action part
+ * gets it shell-quoted */
+static void fallbackrow(void) {
+    char q[sizeof input * 4 + 2], disp[sizeof input + 256];
+    const char *t = strchr(fallback, '\t');
+    size_t n;
+
+    fbline[0] = 0;
+    if (!fallback || !input[0])
+        return;
+    shquote(q, sizeof q, input);
+    if (t) {
+        char tmpl[256];
+        snprintf(tmpl, sizeof tmpl, "%.*s", (int)(t - fallback), fallback);
+        snprintf(disp, sizeof disp, tmpl, input);
+        n = strlen(disp);
+        snprintf(fbline, sizeof fbline, "%s\t", disp);
+        snprintf(fbline + n + 1, sizeof fbline - n - 1, t + 1, q);
+    } else
+        snprintf(fbline, sizeof fbline, fallback, q);
+    arrins(matches, 0, fbline);
+}
 static int cursor;   /* byte offset into input */
 static int sel, off; /* selected match, first visible match */
 static int running = 1;
@@ -242,6 +269,7 @@ static void filter(void) {
         arrput(fbuf, '\0');
         splitlines(fbuf, &matches);
     }
+    fallbackrow();
     sel = off = 0;
 }
 
@@ -374,6 +402,11 @@ static void keypress(XKeyEvent *ev) {
         case XK_c:
         case XK_g:
             exit(1);
+        case XK_Return:
+        case XK_KP_Enter:
+            if (fbline[0])
+                execline(fbline, ev->state & ShiftMask);
+            return;
         default:
             return;
         }
@@ -782,6 +815,8 @@ static void loadsource(const char *arg) {
     for (i = 0; i < LEN(modes); i++)
         if (!strcmp(arg, modes[i].name)) {
             loadlist(modes[i].cmd);
+            if (!fallback)
+                fallback = modes[i].fallback;
             return;
         }
     loadlist(arg);
