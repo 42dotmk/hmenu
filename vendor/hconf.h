@@ -39,6 +39,7 @@ const char *hconf_path(void); /* file consulted; "" if none exists */
 
 /* last value for key ("" section = top level); NULL if absent */
 const char *hconf_get(const char *sec, const char *key);
+
 const char *hconf_str(const char *sec, const char *key, const char *def);
 long hconf_int(const char *sec, const char *key, long def);
 
