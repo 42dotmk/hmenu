@@ -18,6 +18,13 @@ hmenu app             # a mode by name (XDG desktop applications)
 hmenu hist            # hweb browsing history; Return opens the url in hweb,
                       # unmatched text (or Ctrl+Return) searches it in hweb
 hmenu 'ls ~/scripts'  # any command; its output lines become the items
+hmenu --title 'Which branch?' 'git branch --format=%(refname:short)'
+                      # a title above the input says what the menu is for
+                      # (newlines kept, long lines wrapped)
+b=$(hmenu -p 'git branch --format=%(refname:short)')
+                      # -p prints the chosen line (or the typed text when
+                      # nothing matches) instead of running it; Escape
+                      # exits 1 — dmenu-style, for scripts
 ```
 
 An item line may contain a tab: the part before it is shown and matched,
@@ -43,6 +50,10 @@ args = win app run pass scripts
 cmd = ls -1 ~/bin
 ```
 
+`HMENU_FALLBACK='answer: %s\thai answer %s'` gives a list command's menu
+a fallback of its own (a mode's still wins), so unmatched typed text can
+become an answer rather than a command — how hai asks questions, with
+the question itself as the `--title`.
 `hmenu --check` validates the file (syntax, unknown keys, bad numbers)
 and lists the resulting modes without opening a window; a broken file
 never stops hmenu — it warns and runs on the defaults. Key names are in

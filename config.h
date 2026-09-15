@@ -7,8 +7,8 @@
 
 static const char *fontname =
     "Iosevka NFM"; /* fontconfig name/pattern, [font], HMENU_FONT */
-static unsigned int fontsize =
-    14; /* px appended to the pattern; 0 = its own, [fontsize], HMENU_FONTSIZE */
+static unsigned int fontsize = 14; /* px appended to the pattern; 0 = its own,
+                                      [fontsize], HMENU_FONTSIZE */
 static const char *col_bg = "#1a1b26"; /* background, [bg], HMENU_BG */
 static const char *col_fg = "#c0caf5"; /* item text, [fg], HMENU_FG */
 static const char *col_selbg =
@@ -20,17 +20,16 @@ static const char *col_prompt =
 static const char *col_dim =
     "#565f89"; /* match counter, separator, [dim], HMENU_DIM */
 static const char *col_border =
-    "#3b4261"; /* window border, [border], HMENU_BORDERCOL */
+    "#3b4261";                   /* window border, [border], HMENU_BORDERCOL */
 static unsigned int menuw = 640; /* menu width in px, [width], HMENU_WIDTH */
 static unsigned int lines = 15;  /* list rows shown, [lines], HMENU_LINES */
 static unsigned int borderw =
     2; /* window border width, [borderpx], HMENU_BORDERPX */
-static unsigned int hpad = 12;   /* inner horizontal padding, [hpad] */
-static unsigned int vpad = 8;    /* inner vertical padding, [vpad] */
-static unsigned int linepad = 6; /* extra px of row height, [linepad] */
-static const char *terminal =
-    "hterm"; /* Shift+Return: `terminal -e sh -c line`, [terminal],
-                HMENU_TERMINAL */
+static unsigned int hpad = 12;         /* inner horizontal padding, [hpad] */
+static unsigned int vpad = 8;          /* inner vertical padding, [vpad] */
+static unsigned int linepad = 6;       /* extra px of row height, [linepad] */
+static const char *terminal = "hterm"; /* Shift+Return: `terminal -e sh -c
+                                          line`, [terminal], HMENU_TERMINAL */
 static const char *fzfcmd =
     "fzf"; /* filter program, run as `fzf --filter query`, [fzf] */
 
@@ -43,7 +42,9 @@ static const char *fzfcmd =
  * optional fallback is a line template that replaces "run the typed text"
  * when nothing matches (it is shown as the only row), and Ctrl+Return runs
  * it from anywhere: %s in its display part is the query as typed, in its
- * action part the query shell-quoted. The first given mode's is used. */
+ * action part the query shell-quoted. The first given mode's is used;
+ * HMENU_FALLBACK in the environment serves a menu whose modes have none
+ * (a list command's, e.g. hai's questions: typed text is the answer). */
 static const struct mode {
     const char *name;
     const char *cmd;

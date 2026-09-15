@@ -8,7 +8,10 @@
  * like fzf. With an empty query the list shows the sources' own order.
  * Return executes the selected line with `sh -c` (or the typed text when
  * nothing matches), Shift+Return runs it in the terminal
- * (`terminal -e sh -c line`, st-style), Escape cancels.
+ * (`terminal -e sh -c line`, st-style), Escape cancels. `--title text`
+ * shows what the menu is for above the input (multiline, word-wrapped);
+ * `-p` prints the chosen line to stdout instead of running it (dmenu-
+ * style, for `answer=$(hmenu -p ...)`), Escape then exits 1.
  *
  * A line may contain a tab: the part before it is displayed and matched,
  * the part after it is what gets executed. `hmenu -l` prints the EWMH
@@ -73,8 +76,14 @@ static char *fbuf;     /* stb_ds char array: last fzf output */
 static char **matches; /* stb_ds: current matches (into listbuf/fbuf) */
 static FILE *listfile; /* raw list again, stdin for fzf */
 static char input[1024];
-static const char *fallback;          /* first given mode's, see config.h */
+static const char *fallback; /* first given mode's, else HMENU_FALLBACK */
+static const char *modefb;   /* the mode's, once one gave it */
 static char fbline[sizeof input * 6]; /* the fallback row for this query */
+static const char *title;             /* --title: shown above the input */
+static char *titlebuf;                /* stb_ds char array: its lines */
+static int *tlines;                   /* stb_ds: line offsets in titlebuf */
+static int titleh;                    /* the title block height, 0 without */
+static int printmode;                 /* -p: print the choice, don't run */
 static void shquote(char *dst, size_t size, const char *s);
 
 /* the mode's fallback line for this query (the template's display part
@@ -114,7 +123,7 @@ static void die(const char *msg) {
 static void usage(void) {
     size_t i;
 
-    fputs("usage: hmenu [mode|listcmd]...\n"
+    fputs("usage: hmenu [-p] [--title text] [mode|listcmd]...\n"
           "       hmenu -l | -d | -a windowid | -v | --check\nmodes:",
           stderr);
     for (i = 0; i < (size_t)arrlen(allmodes); i++)
@@ -242,6 +251,8 @@ static void loadconfig(void) {
     envuint("HMENU_LINES", &lines);
     envuint("HMENU_BORDERPX", &borderw);
     envstr("HMENU_TERMINAL", &terminal);
+    envstr("HMENU_FALLBACK", &fallback); /* for a list command's menu:
+                                            a mode's own still wins */
 }
 
 /* --check: parse + validate the conf file, list the modes, no window */
@@ -301,6 +312,40 @@ static void drawtext(int x, int y, XftColor *c, const char *s, int maxw) {
         len = utf8prev(s, len);
     if (len)
         XftDrawStringUtf8(xd, c, font, x, y, (const FcChar8 *)s, len);
+}
+
+/* --title: split it into lines above the input, hard breaks kept,
+ * long lines word-wrapped to maxw px */
+static void wraptitle(int maxw) {
+    const char *s, *sp;
+    char *d;
+    int n, k;
+
+    for (s = title; s && *s; s += k, s += (*s == '\n' || *s == ' ')) {
+        n = k = (int)strcspn(s, "\n");
+        if (k > 256) { /* far beyond any menu width; keep it cheap */
+            k = 256;
+            while (((unsigned char)s[k] & 0xc0) == 0x80)
+                k--;
+        }
+        while (k && textwn(s, k) > maxw)
+            k = utf8prev(s, k);
+        if (k < n) { /* wrapped: back to the last space, if any */
+            for (sp = s + k; sp > s && *sp != ' '; sp--)
+                ;
+            if (sp > s)
+                k = (int)(sp - s);
+            if (!k) /* one character wider than the menu */
+                k = utf8next(s, 0);
+        }
+        arrput(tlines, (int)arrlen(titlebuf));
+        d = arraddnptr(titlebuf, k + 1);
+        memcpy(d, s, (size_t)k);
+        d[k] = '\0';
+        for (; *d; d++) /* a tab would end the drawn text */
+            if (*d == '\t')
+                *d = ' ';
+    }
 }
 
 static void splitlines(char *b, char ***out) {
@@ -401,8 +446,12 @@ static void drawmenu(void) {
     XSetForeground(dpy, gc, cbg.pixel);
     XFillRectangle(dpy, buf, gc, 0, 0, (unsigned int)ww, (unsigned int)wh);
 
-    /* input row: typed text with caret, match counter */
-    y = (int)vpad + (int)linepad / 2 + font->ascent;
+    /* title lines, then the input row: typed text with caret, counter */
+    for (i = 0; i < (int)arrlen(tlines); i++)
+        drawtext((int)hpad,
+                 (int)vpad + i * rowh + (int)linepad / 2 + font->ascent, &cfg,
+                 titlebuf + tlines[i], ww - 2 * (int)hpad);
+    y = (int)vpad + titleh + (int)linepad / 2 + font->ascent;
     x = (int)hpad;
     snprintf(cnt, sizeof(cnt), "%d/%d", n, (int)arrlen(items));
     cntw = textw(cnt);
@@ -416,11 +465,11 @@ static void drawmenu(void) {
     XSetForeground(dpy, gc, cprompt.pixel);
     XFillRectangle(dpy, buf, gc, caretx, y - font->ascent, 2, (unsigned int)fh);
 
-    sepy = (int)vpad + rowh + (int)vpad / 2;
+    sepy = (int)vpad + titleh + rowh + (int)vpad / 2;
     XSetForeground(dpy, gc, cdim.pixel);
     XDrawLine(dpy, buf, gc, 0, sepy, ww, sepy);
 
-    y = (int)vpad + rowh + (int)vpad;
+    y = (int)vpad + titleh + rowh + (int)vpad;
     for (i = off; i < n && i < off + (int)lines; i++) {
         s = matches[i];
         if (i == sel) {
@@ -439,11 +488,17 @@ static void drawmenu(void) {
 
 /* run line and quit: `sh -c line`, or `terminal -e sh -c line` (st-style
  * -e, everything after it is the child's argv) with Shift held. A tab
- * splits display from action: only what follows it is executed */
+ * splits display from action: only what follows it is executed. With -p
+ * the whole line is printed instead (the caller splits, if it must) */
 static void execline(const char *line, int interm) {
     const char *t = strchr(line, '\t');
     pid_t pid;
 
+    if (printmode) {
+        puts(line);
+        running = 0;
+        return;
+    }
     if (t)
         line = t + 1;
     if ((pid = fork()) < 0)
@@ -642,7 +697,7 @@ static void setup(void) {
     XClassHint ch = {(char *)"hmenu", (char *)"hmenu"};
     Atom type, dialog;
     char pat[256];
-    int x, y;
+    int x, y, room;
 
     if (!(dpy = XOpenDisplay(NULL)))
         die("hmenu: cannot open display\n");
@@ -668,6 +723,13 @@ static void setup(void) {
     if (ww > mw - 2 * (int)borderw)
         ww = mw - 2 * (int)borderw;
     wh = 2 * (int)vpad + rowh + (int)vpad + (int)lines * rowh;
+    wraptitle(ww - 2 * (int)hpad);
+    room = mh - 2 * (int)borderw - wh; /* a long title still fits */
+    if ((int)arrlen(tlines) * rowh > room)
+        arrsetlen(tlines, room > 0 ? room / rowh : 0);
+    if (arrlen(tlines)) /* plus a gap before the input */
+        titleh = (int)arrlen(tlines) * rowh + (int)vpad;
+    wh += titleh;
     x = mx + (mw - ww) / 2 - (int)borderw;
     y = my + (mh - wh) / 2 - (int)borderw;
     swa.override_redirect = True;
@@ -927,19 +989,20 @@ static void loadsource(const char *arg) {
     for (i = 0; i < (size_t)arrlen(allmodes); i++)
         if (!strcmp(arg, allmodes[i].name)) {
             loadlist(allmodes[i].cmd);
-            if (!fallback)
-                fallback = allmodes[i].fallback;
+            if (!modefb && allmodes[i].fallback)
+                fallback = modefb = allmodes[i].fallback;
             return;
         }
     loadlist(arg);
 }
 
 int main(int argc, char *argv[]) {
-    int a;
+    int a, nsrc = 0;
 
     setlocale(LC_CTYPE, "");
     loadconfig();
-    if (argc > 1 && argv[1][0] == '-') {
+    if (argc > 1 && argv[1][0] == '-' && strcmp(argv[1], "--title") &&
+        strcmp(argv[1], "-p")) {
         if (!strcmp(argv[1], "-l") && argc == 2)
             return listwindows();
         if (!strcmp(argv[1], "-d") && argc == 2)
@@ -959,8 +1022,15 @@ int main(int argc, char *argv[]) {
     /* sources are appended in order; with an empty query the list
      * shows them exactly that way, unsorted */
     for (a = 1; a < argc; a++)
-        loadsource(argv[a]);
-    if (argc < 2)
+        if (!strcmp(argv[a], "--title") && a + 1 < argc)
+            title = argv[++a];
+        else if (!strcmp(argv[a], "-p"))
+            printmode = 1;
+        else {
+            loadsource(argv[a]);
+            nsrc++;
+        }
+    if (!nsrc)
         for (a = 0; a < (int)arrlen(runargs); a++)
             loadsource(runargs[a]);
     arrput(listbuf, '\0');

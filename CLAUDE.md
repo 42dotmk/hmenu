@@ -13,6 +13,12 @@ command passed as the argument), and matching/ranking is delegated to
 like interactive fzf. Return executes the selected line via `sh -c` (or the
 typed text verbatim when nothing matches), Shift+Return wraps it in
 `terminal -e sh -c line` (st-style `-e`), Escape/Ctrl-C cancels.
+`--title text` puts a caption above the input (`wraptitle()`: newlines
+kept, long lines word-wrapped to the menu width, lines dropped from the
+end if the window would not fit the monitor); without it the layout is
+unchanged. `-p` makes `execline()` print the whole chosen line (display
+and action part, tab included) to stdout instead of running it, so a
+script can `$(hmenu -p ...)`; Escape still exits 1.
 
 Configuration is layered (see `loadconfig()`), weakest first:
 
