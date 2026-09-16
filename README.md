@@ -7,8 +7,8 @@ items come from shell commands, matching comes from
 A centered window with a typed filter and a vertical list. Type to
 filter (exactly fzf's matching — it *is* fzf, run with `--filter` on
 every keystroke), Return runs the selected line with `sh -c`,
-Shift+Return runs it in a terminal (`hterm -e sh -c ...`), Escape
-cancels. If nothing matches, Return runs what you typed — or, for modes
+Shift+Return runs it in a terminal (`hterm -e sh -c ...`) — or, for
+rows that carry one, their own alternate action — Escape cancels. If nothing matches, Return runs what you typed — or, for modes
 with a fallback (`run`, `hist`: a web search in hweb), that; Ctrl+Return
 runs the fallback from anywhere.
 
@@ -22,6 +22,9 @@ hmenu xbps            # Void packages, installed first: [*] installed, [u]
                       # update / remove / details (hmenu-xbps, a script)
 hmenu keys            # hwm's key bindings with what they do (`hwm keys`);
                       # Return runs the binding, via `hwm send`
+hmenu pass            # password-store entries; Return copies the password,
+                      # Shift+Return asks what to copy (a field, the otp) or
+                      # to edit; an unmatched name is a new entry (hmenu-pass)
 hmenu 'ls ~/scripts'  # any command; its output lines become the items
 hmenu --title 'Which branch?' 'git branch --format=%(refname:short)'
                       # a title above the input says what the menu is for
@@ -36,8 +39,9 @@ pw=$(hmenu -s --title 'Password:')
 ```
 
 An item line may contain a tab: the part before it is shown and matched,
-the part after it is what runs. Two helper flags print lists in that
-shape: `hmenu -l` (open windows, activated via `hmenu -a id`) and
+the part after it is what runs; a second tab starts the row's own
+Shift+Return action, when a terminal is not the useful alternative.
+Two helper flags print lists in that shape: `hmenu -l` (open windows, activated via `hmenu -a id`) and
 `hmenu -d` (XDG desktop entries, with Exec field codes stripped,
 Terminal=true wrapped in the terminal).
 The `xbps` mode is a shell script, `hmenu-xbps`: `list` prints the
@@ -50,6 +54,14 @@ title, the askpass contract: password on stdout, exit 1 to cancel).
 `sudo -A` on the desktop prompt that way; a plain `sudo`, or one over
 ssh without a DISPLAY, keeps asking on the terminal — sudo only calls
 the askpass with `-A` or when it has no tty.
+The `pass` mode is `hmenu-pass`: Return copies the password (`pass
+show -c`, cleared after 45 s), Shift+Return opens a chooser for the
+entry — `password`, `otp` (an `otpauth://` line, pass-otp's convention;
+the row shows the current code and its remaining seconds, `pass otp -c`
+copies it), each `key: value` field with its value shown (copied
+without the key), and `edit` (`pass edit` in the terminal, so `$EDITOR`). A name
+that matches nothing (or Ctrl+Return) creates that entry: a template
+with a generated password in `$EDITOR`, saved by `pass insert`.
 
 Configuration is layered, weakest first: `config.h` defaults
 (recompile), `~/.config/hackable/hmenu.conf` (runtime, optional), and

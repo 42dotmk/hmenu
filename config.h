@@ -38,7 +38,9 @@ static const char *fzfcmd =
  * Commands run through `sh -c` and print one item per line; the chosen
  * line is executed with `sh -c` (Return) or in the terminal (Shift+Return).
  * A tab in a line splits display from action: the part before it is shown
- * and matched, the part after it is executed (see `hmenu -l`). A mode's
+ * and matched, the part after it is executed (see `hmenu -l`); after a
+ * second tab comes the row's own Shift+Return action, replacing the
+ * terminal (see `hmenu-pass list`). A mode's
  * optional fallback is a line template that replaces "run the typed text"
  * when nothing matches (it is shown as the only row), and Ctrl+Return runs
  * it from anywhere: %s in its display part is the query as typed, in its
@@ -56,10 +58,11 @@ static const struct mode {
      "{ IFS=:; for d in $PATH; do [ -d \"$d\" ] && ls -1 \"$d\"; done; "
      "} 2>/dev/null | sort -u",
      "search: %s\thweb %s"}, /* nothing to run: search the web */
-    {"pass", /* password-store entries; Return copies via `pass -c` */
-     "cd ~/.password-store && find . -name '*.gpg' -not -path './.git/*' | "
-     "sed 's|^\\./||;s|\\.gpg$||' | sort -f | sed \"s/.*/&\\tpass -c '&'/\"",
-     NULL},
+    {"pass", /* password-store entries (hmenu-pass): Return copies the
+              * password, Shift+Return asks what to copy (a field, the
+              * otp) or to edit the entry; an unmatched name is a new entry
+              * from a template in $EDITOR */
+     "hmenu-pass list", "new: %s\thmenu-pass new %s"},
     {"hist", /* hweb history, newest first, one entry per url; Return opens
               * the url in a new hweb window, unmatched text is searched */
      "tac \"${XDG_DATA_HOME:-$HOME/.local/share}/hweb/history\" 2>/dev/null | "

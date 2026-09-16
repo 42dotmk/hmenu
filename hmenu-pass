@@ -1,0 +1,143 @@
+#!/bin/sh
+# hmenu-pass: the pass mode of hmenu (password-store entries).
+#   list          the rows: `name<tab>hmenu-pass copy name 1<tab>hmenu-pass
+#                 menu name` — Return copies the password, Shift+Return
+#                 opens the chooser
+#   menu name     the chooser, a second hmenu: what to copy — password,
+#                 otp (when the entry has an otpauth:// line, pass-otp's
+#                 convention; the row shows the current code and how long
+#                 it lasts), every `key: value` field with its value shown
+#                 (values of pass/pin/secret/token keys hidden) — or edit,
+#                 the whole entry in $EDITOR (`pass edit`)
+#   copy name N   copy line N of the entry (`pass show -cN`, cleared after
+#                 45 s like pass -c); N = otp copies the current code
+#   edit name     `pass edit name` in the terminal
+#   new name      a new entry: the template below in $EDITOR in the
+#                 terminal, saved with `pass insert` (the mode's fallback,
+#                 so an unmatched name typed into the list creates it)
+# The terminal is HMENU_TERMINAL (hterm by default), like Shift+Return.
+# The entry is decrypted before any hmenu opens, so gpg's pinentry never
+# has to fight hmenu's keyboard grab.
+set -u
+term=${HMENU_TERMINAL:-hterm}
+store=${PASSWORD_STORE_DIR:-$HOME/.password-store}
+
+# what a new entry starts as; line 1 is the password (pass's convention)
+template() {
+    LC_ALL=C tr -dc '[:alnum:][:punct:]' </dev/urandom | head -c 25
+    printf '\nlogin: \nurl: \n'
+}
+
+list() {
+    cd "$store" 2>/dev/null || exit 1
+    find . -name '*.gpg' -not -path './.git/*' | sed 's|^\./||;s|\.gpg$||' |
+        sort -f | awk '{ n = $0; gsub(/["\\$`]/, "\\\\&", n)
+            printf "%s\thmenu-pass copy \"%s\" 1\thmenu-pass menu \"%s\"\n", $0, n, n }'
+}
+
+# run a command in the terminal; on failure keep it open until Return
+interm() {
+    exec "$term" -e sh -c \
+        '"$@" || { echo; echo "press return to close"; read -r _; }' sh "$@"
+}
+
+notify() {
+    if command -v notify-send >/dev/null; then notify-send "$1"; else echo "$1"; fi
+}
+
+# a `key: value` line is one whose key has no colon, slash or tab and is
+# followed by a space (`url: https://x` is, `https://x` is not)
+key='^[^:/\t]+:([ \t]+|$)'
+
+# the clipboard for 45 s (PASSWORD_STORE_CLIP_TIME, like pass), then what
+# it held before, unless something else was copied meanwhile
+clip() {
+    old=$(xclip -o -selection clipboard 2>/dev/null | base64)
+    new=$(printf %s "$1" | base64)
+    printf %s "$1" | xclip -selection clipboard
+    (
+        sleep "$cliptime"
+        [ "$(xclip -o -selection clipboard 2>/dev/null | base64)" = "$new" ] ||
+            exit
+        printf %s "$old" | base64 -d | xclip -selection clipboard
+    ) &
+}
+cliptime=${PASSWORD_STORE_CLIP_TIME:-45}
+
+# copy line N: the password and the otp through pass, a field's value
+# without its key (`pass show -cN` would copy the whole line)
+copy() {
+    case $2 in
+    1) m=$(pass show -c1 "$1") || exit 1 ;;
+    otp) m=$(pass otp -c "$1") || exit 1 ;;
+    *)
+        r=$(pass show "$1" | awk -v n="$2" -v key="$key" 'NR == n {
+            k = "line " n
+            if (match($0, key)) { k = $0; sub(/:.*/, "", k)
+                $0 = substr($0, RLENGTH + 1) }
+            print k "\t" $0 }') || exit 1
+        clip "${r#*	}"
+        m="Copied ${r%%	*} of $1 to clipboard. Will clear in $cliptime seconds."
+        ;;
+    esac
+    notify "$m"
+}
+
+# the rows: `label<tab>N` (N a line number, otp, or edit); values of
+# secret-looking keys are not shown; $1 is the current otp code, if any
+rows() {
+    awk -v key="$key" -v otp="$1" '
+        NR == 1 { print "password\t1"; next }
+        /^otpauth:\/\// { print (otp == "" ? "otp" : "otp  " otp) "\totp"; next }
+        /^[ \t]*$/ { next }
+        { l = $0
+          if (match(l, key)) { k = l; sub(/:.*/, "", k)
+              if (tolower(k) ~ /(pass|pin|secret|token)/) l = k ": ****" }
+          print l "\t" NR }
+        END { print "edit\tedit" }'
+}
+
+# the current code and the seconds it is still valid (period= in the
+# otpauth uri, 30 by default), e.g. `123456  (17s)`
+otpcode() {
+    code=$(pass otp code "$1" 2>/dev/null) || return
+    period=$(printf '%s\n' "$2" | sed -n 's/.*[?&]period=\([0-9]*\).*/\1/p')
+    echo "$code  ($((${period:-30} - $(date +%s) % ${period:-30}))s)"
+}
+
+menu() {
+    p=$1
+    e=$(pass show "$p") || exit 1
+    case $e in *otpauth://*) otp=$(otpcode "$p" "$e") ;; *) otp= ;; esac
+    c=$(printf '%s\n' "$e" | rows "$otp" | hmenu -p --title "$p" cat) || exit 1
+    a=${c##*	}
+    case $a in
+    edit) interm pass edit "$p" ;;
+    *) copy "$p" "$a" ;;
+    esac
+}
+
+# in the terminal: edit the template, then insert it
+insert() {
+    p=$1
+    [ -e "$store/$p.gpg" ] && { echo "$p already exists" >&2; exit 1; }
+    d=/dev/shm
+    [ -w "$d" ] || d=${TMPDIR:-/tmp}
+    tmp=$(mktemp "$d/hmenu-pass.XXXXXX") || exit 1
+    trap 'rm -f "$tmp"' EXIT
+    template >"$tmp"
+    "${EDITOR:-vi}" "$tmp" && pass insert -m -f "$p" <"$tmp"
+}
+
+case ${1:-} in
+list) list ;;
+menu) menu "$2" ;;
+copy) copy "$2" "$3" ;;
+edit) interm pass edit "$2" ;;
+new) [ -e "$store/$2.gpg" ] && exec "$0" menu "$2"; interm "$0" insert "$2" ;;
+insert) insert "$2" ;;
+*)
+    echo "usage: hmenu-pass list | menu|edit|new name | copy name N" >&2
+    exit 2
+    ;;
+esac

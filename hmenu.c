@@ -17,7 +17,8 @@
  * Return prints it.
  *
  * A line may contain a tab: the part before it is displayed and matched,
- * the part after it is what gets executed. `hmenu -l` prints the EWMH
+ * the part after it is what gets executed; a second tab starts the row's
+ * own Shift+Return action (see execline). `hmenu -l` prints the EWMH
  * window list in that shape ("TITLE\thmenu -a 0xID" - the win mode), and
  * `hmenu -a windowid` activates a window via _NET_ACTIVE_WINDOW.
  * `hmenu -d` prints XDG desktop applications the same way ("NAME\tcommand",
@@ -507,12 +508,15 @@ blit:
     XFlush(dpy);
 }
 
-/* run line and quit: `sh -c line`, or `terminal -e sh -c line` (st-style
- * -e, everything after it is the child's argv) with Shift held. A tab
- * splits display from action: only what follows it is executed. With -p
- * the whole line is printed instead (the caller splits, if it must) */
-static void execline(const char *line, int interm) {
-    const char *t = strchr(line, '\t');
+/* run line and quit. A line is DISPLAY\tACTION\tALT: only what follows
+ * the first tab runs (`sh -c ACTION`); with Shift held the part after a
+ * second tab runs instead, the source's alternate action for that row,
+ * or without one ACTION runs in the terminal (`terminal -e sh -c ACTION`,
+ * st-style -e: everything after it is the child's argv). With -p the
+ * whole line is printed instead (the caller splits, if it must) */
+static void execline(const char *line, int shift) {
+    const char *t = strchr(line, '\t'), *alt;
+    char act[4096];
     pid_t pid;
 
     if (printmode) {
@@ -522,11 +526,20 @@ static void execline(const char *line, int interm) {
     }
     if (t)
         line = t + 1;
+    if (t && (alt = strchr(line, '\t'))) {
+        if (shift) {
+            line = alt + 1;
+            shift = 0;
+        } else {
+            snprintf(act, sizeof act, "%.*s", (int)(alt - line), line);
+            line = act;
+        }
+    }
     if ((pid = fork()) < 0)
         die("hmenu: fork failed\n");
     if (!pid) {
         setsid();
-        if (interm)
+        if (shift)
             execlp(terminal, terminal, "-e", "sh", "-c", line, (char *)NULL);
         else
             execl("/bin/sh", "sh", "-c", line, (char *)NULL);

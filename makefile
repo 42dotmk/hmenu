@@ -21,10 +21,12 @@ install: hmenu
 	mkdir -p $(BINDIR)
 	ln -sf "$$(pwd)/hmenu" $(BINDIR)/hmenu
 	ln -sf "$$(pwd)/hmenu-xbps" $(BINDIR)/hmenu-xbps
+	ln -sf "$$(pwd)/hmenu-pass" $(BINDIR)/hmenu-pass
 	ln -sf "$$(pwd)/hmenu-askpass" $(BINDIR)/hmenu-askpass
 
 uninstall:
-	rm -f $(BINDIR)/hmenu $(BINDIR)/hmenu-xbps $(BINDIR)/hmenu-askpass
+	rm -f $(BINDIR)/hmenu $(BINDIR)/hmenu-xbps $(BINDIR)/hmenu-pass \
+	      $(BINDIR)/hmenu-askpass
 
 clean:
 	rm -f hmenu

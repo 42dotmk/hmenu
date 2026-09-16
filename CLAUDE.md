@@ -11,8 +11,10 @@ sources: items come from shell commands (`modes[]` in `config.h`, or the
 command passed as the argument), and matching/ranking is delegated to
 `fzf --filter <query>`, re-run on every keystroke, so search behaves exactly
 like interactive fzf. Return executes the selected line via `sh -c` (or the
-typed text verbatim when nothing matches), Shift+Return wraps it in
-`terminal -e sh -c line` (st-style `-e`), Escape/Ctrl-C cancels.
+typed text verbatim when nothing matches), Shift+Return runs the part
+after a second tab if the line has one (the row's own alternate action)
+and otherwise wraps it in `terminal -e sh -c line` (st-style `-e`),
+Escape/Ctrl-C cancels.
 `-s` is a password prompt: no list, stars for the text, prints on Return.
 `--title text` puts a caption above the input (`wraptitle()`: newlines
 kept, long lines word-wrapped to the menu width, lines dropped from the
@@ -72,7 +74,13 @@ keyboard. XTEST fake keys work against the grab for scripted checks.
   with the choices for the package's state, then `exec "$0" choice name`;
   its sudo runs with `-A` and `SUDO_ASKPASS=hmenu-askpass`, a two-line
   script around `hmenu -s`: the secret prompt (input row only, `*`s for
-  the text, no sources/fzf/fallback, implies `-p`), `secret` in hmenu.c. `listapps()`
+  the text, no sources/fzf/fallback, implies `-p`), `secret` in hmenu.c.
+  The `pass` mode is `hmenu-pass` in the same shape: `list` rows carry
+  a third field, so Return copies the password and Shift+Return runs
+  `menu name` — a `-p` chooser of the entry's lines (password, otp via
+  pass-otp, fields, edit) fed through stdin (`hmenu -p cat`, the list
+  command inherits hmenu's stdin); the mode's fallback is `new name`,
+  a template in `$EDITOR` then `pass insert`. `listapps()`
   scans `$XDG_DATA_HOME` then `$XDG_DATA_DIRS` `applications/` dirs
   (earlier dirs shadow later ones by filename, tracked with an stb_ds
   string map); `desktopentry()` parses only the `[Desktop Entry]` group,
