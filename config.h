@@ -74,7 +74,7 @@ static const struct mode {
     {"keys", /* hwm's key bindings with what they do (`hwm keys`: key, command,
               * description, tab-separated); Return runs the binding's
               * command through `hwm send`, the same path as the key */
-     "hwm keys | awk -F'\\t' '{ printf \"%-24s %s\\t%s\\n\", $1, $3, "
+     "hwm keys | awk -F'\\t' '{ printf \"%-48s %s\\t%s\\n\", $3, $1, "
      "$2 == \"\" ? \":\" : \"hwm send \" $2 }'",
      NULL},
     /* { "scripts", "ls -1 ~/bin" }, */
