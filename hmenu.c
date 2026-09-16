@@ -11,7 +11,10 @@
  * (`terminal -e sh -c line`, st-style), Escape cancels. `--title text`
  * shows what the menu is for above the input (multiline, word-wrapped);
  * `-p` prints the chosen line to stdout instead of running it (dmenu-
- * style, for `answer=$(hmenu -p ...)`), Escape then exits 1.
+ * style, for `answer=$(hmenu -p ...)`), Escape then exits 1. `-s` is
+ * the secret variant of that (an askpass: `SUDO_ASKPASS=hmenu-askpass`):
+ * just the input row, typed text drawn as `*`s, no list and no sources,
+ * Return prints it.
  *
  * A line may contain a tab: the part before it is displayed and matched,
  * the part after it is what gets executed. `hmenu -l` prints the EWMH
@@ -84,6 +87,7 @@ static char *titlebuf;                /* stb_ds char array: its lines */
 static int *tlines;                   /* stb_ds: line offsets in titlebuf */
 static int titleh;                    /* the title block height, 0 without */
 static int printmode;                 /* -p: print the choice, don't run */
+static int secret;                    /* -s: password prompt, implies -p */
 static void shquote(char *dst, size_t size, const char *s);
 
 /* the mode's fallback line for this query (the template's display part
@@ -124,6 +128,7 @@ static void usage(void) {
     size_t i;
 
     fputs("usage: hmenu [-p] [--title text] [mode|listcmd]...\n"
+          "       hmenu -s [--title text]\n"
           "       hmenu -l | -d | -a windowid | -v | --check\nmodes:",
           stderr);
     for (i = 0; i < (size_t)arrlen(allmodes); i++)
@@ -392,6 +397,10 @@ static void filter(void) {
     pid_t pid;
 
     arrsetlen(matches, 0);
+    if (secret) { /* nothing to match, the input is the answer */
+        sel = off = 0;
+        return;
+    }
     if (!input[0]) { /* no query: the list as-is */
         for (i = 0; i < arrlen(items); i++)
             arrput(matches, items[i]);
@@ -431,9 +440,9 @@ static void filter(void) {
 }
 
 static void drawmenu(void) {
-    char cnt[32];
-    const char *s;
-    int i, n, y, x, cntw, caretx, start, maxw, sepy;
+    char cnt[32], stars[sizeof input];
+    const char *s, *in = input;
+    int i, n, y, x, cntw = 0, caretx, start, maxw, sepy, cur = cursor;
 
     n = (int)arrlen(matches);
     if (sel >= n)
@@ -453,17 +462,28 @@ static void drawmenu(void) {
                  titlebuf + tlines[i], ww - 2 * (int)hpad);
     y = (int)vpad + titleh + (int)linepad / 2 + font->ascent;
     x = (int)hpad;
-    snprintf(cnt, sizeof(cnt), "%d/%d", n, (int)arrlen(items));
-    cntw = textw(cnt);
-    drawtext(ww - (int)hpad - cntw, y, &cdim, cnt, cntw);
+    if (secret) { /* one star per character, the caret between them */
+        for (i = 0, n = 0; input[i]; i = utf8next(input, i), n++)
+            stars[n] = '*';
+        stars[n] = 0;
+        for (i = 0, cur = 0; i < cursor; i = utf8next(input, i))
+            cur++;
+        in = stars;
+    } else {
+        snprintf(cnt, sizeof(cnt), "%d/%d", n, (int)arrlen(items));
+        cntw = textw(cnt);
+        drawtext(ww - (int)hpad - cntw, y, &cdim, cnt, cntw);
+    }
     maxw = ww - x - (int)hpad - cntw - fh / 2;
     start = 0; /* scroll the input so the caret stays visible */
-    while (textwn(input + start, cursor - start) > maxw && start < cursor)
-        start = utf8next(input, start);
-    drawtext(x, y, &cprompt, input + start, maxw);
-    caretx = x + textwn(input + start, cursor - start);
+    while (textwn(in + start, cur - start) > maxw && start < cur)
+        start = utf8next(in, start);
+    drawtext(x, y, &cprompt, in + start, maxw);
+    caretx = x + textwn(in + start, cur - start);
     XSetForeground(dpy, gc, cprompt.pixel);
     XFillRectangle(dpy, buf, gc, caretx, y - font->ascent, 2, (unsigned int)fh);
+    if (secret)
+        goto blit;
 
     sepy = (int)vpad + titleh + rowh + (int)vpad / 2;
     XSetForeground(dpy, gc, cdim.pixel);
@@ -481,6 +501,7 @@ static void drawmenu(void) {
                  i == sel ? &cselfg : &cfg, s, ww - 2 * (int)hpad);
         y += rowh;
     }
+blit:
     XCopyArea(dpy, buf, win, gc, 0, 0, (unsigned int)ww, (unsigned int)wh, 0,
               0);
     XFlush(dpy);
@@ -722,7 +743,7 @@ static void setup(void) {
     ww = (int)menuw;
     if (ww > mw - 2 * (int)borderw)
         ww = mw - 2 * (int)borderw;
-    wh = 2 * (int)vpad + rowh + (int)vpad + (int)lines * rowh;
+    wh = 2 * (int)vpad + rowh + (secret ? 0 : (int)vpad + (int)lines * rowh);
     wraptitle(ww - 2 * (int)hpad);
     room = mh - 2 * (int)borderw - wh; /* a long title still fits */
     if ((int)arrlen(tlines) * rowh > room)
@@ -1002,7 +1023,7 @@ int main(int argc, char *argv[]) {
     setlocale(LC_CTYPE, "");
     loadconfig();
     if (argc > 1 && argv[1][0] == '-' && strcmp(argv[1], "--title") &&
-        strcmp(argv[1], "-p")) {
+        strcmp(argv[1], "-p") && strcmp(argv[1], "-s")) {
         if (!strcmp(argv[1], "-l") && argc == 2)
             return listwindows();
         if (!strcmp(argv[1], "-d") && argc == 2)
@@ -1026,11 +1047,16 @@ int main(int argc, char *argv[]) {
             title = argv[++a];
         else if (!strcmp(argv[a], "-p"))
             printmode = 1;
+        else if (!strcmp(argv[a], "-s"))
+            secret = printmode = 1;
         else {
             loadsource(argv[a]);
             nsrc++;
         }
-    if (!nsrc)
+    if (secret) { /* no items, no fallback: the typed text is the answer */
+        arrsetlen(listbuf, 0);
+        fallback = NULL;
+    } else if (!nsrc)
         for (a = 0; a < (int)arrlen(runargs); a++)
             loadsource(runargs[a]);
     arrput(listbuf, '\0');

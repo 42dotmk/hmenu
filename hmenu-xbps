@@ -9,9 +9,12 @@
 #                 the choices: details pages `xbps-query` in the terminal,
 #                 the others run xbps with sudo there (xbps asks y/N, the
 #                 terminal waits for Return before closing)
-# The terminal is HMENU_TERMINAL (hterm by default), like Shift+Return.
+# The terminal is HMENU_TERMINAL (hterm by default), like Shift+Return;
+# sudo asks for the password through SUDO_ASKPASS (hmenu-askpass unless
+# the session set another), so the prompt is an hmenu too.
 set -u
 term=${HMENU_TERMINAL:-hterm}
+export SUDO_ASKPASS=${SUDO_ASKPASS:-hmenu-askpass}
 
 # xbps-query -Rs marks [*] only when the exact pkgver is installed, so the
 # state is computed from the installed list instead
@@ -52,8 +55,8 @@ menu() {
 case ${1:-} in
 list) list ;;
 menu) menu "$2" ;;
-install | update) interm "sudo xbps-install -S $2" ;;
-remove) interm "sudo xbps-remove -R $2" ;;
+install | update) interm "sudo -A xbps-install -S $2" ;;
+remove) interm "sudo -A xbps-remove -R $2" ;;
 details)
     if xbps-query "$2" >/dev/null 2>&1; then q=; else q=-R; fi
     exec "$term" -e sh -c "xbps-query $q $2 | \${PAGER:-less}"

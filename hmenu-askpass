@@ -1,0 +1,7 @@
+#!/bin/sh
+# hmenu-askpass: sudo/ssh askpass helper — the prompt is $1, the password
+# goes to stdout, Escape exits 1 (cancel). Only ever runs on a display:
+# `SUDO_ASKPASS=hmenu-askpass sudo -A ...`; a plain sudo, or one over ssh
+# without a DISPLAY, keeps asking on the terminal.
+[ -n "${DISPLAY:-}" ] || { echo "hmenu-askpass: no DISPLAY" >&2; exit 1; }
+exec hmenu -s --title "${1:-Password:}"

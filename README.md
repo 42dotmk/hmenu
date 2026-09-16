@@ -28,6 +28,9 @@ b=$(hmenu -p 'git branch --format=%(refname:short)')
                       # -p prints the chosen line (or the typed text when
                       # nothing matches) instead of running it; Escape
                       # exits 1 — dmenu-style, for scripts
+pw=$(hmenu -s --title 'Password:')
+                      # -s: a secret prompt — the input row only, typed
+                      # text shown as *s, Return prints it (implies -p)
 ```
 
 An item line may contain a tab: the part before it is shown and matched,
@@ -38,7 +41,13 @@ Terminal=true wrapped in the terminal).
 The `xbps` mode is a shell script, `hmenu-xbps`: `list` prints the
 rows, `menu name` (each row's action) opens a second hmenu with the
 choices that fit the package's state and runs the one picked in the
-terminal (`HMENU_TERMINAL`, hterm by default).
+terminal (`HMENU_TERMINAL`, hterm by default). Its sudo asks for the
+password through `hmenu-askpass` (`hmenu -s` with sudo's prompt as the
+title, the askpass contract: password on stdout, exit 1 to cancel).
+`export SUDO_ASKPASS=hmenu-askpass` in your X session makes any
+`sudo -A` on the desktop prompt that way; a plain `sudo`, or one over
+ssh without a DISPLAY, keeps asking on the terminal — sudo only calls
+the askpass with `-A` or when it has no tty.
 
 Configuration is layered, weakest first: `config.h` defaults
 (recompile), `~/.config/hackable/hmenu.conf` (runtime, optional), and

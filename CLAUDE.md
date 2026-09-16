@@ -13,6 +13,7 @@ command passed as the argument), and matching/ranking is delegated to
 like interactive fzf. Return executes the selected line via `sh -c` (or the
 typed text verbatim when nothing matches), Shift+Return wraps it in
 `terminal -e sh -c line` (st-style `-e`), Escape/Ctrl-C cancels.
+`-s` is a password prompt: no list, stars for the text, prints on Return.
 `--title text` puts a caption above the input (`wraptitle()`: newlines
 kept, long lines word-wrapped to the menu width, lines dropped from the
 end if the window would not fit the monitor); without it the layout is
@@ -68,7 +69,10 @@ keyboard. XTEST fake keys work against the grab for scripted checks.
   is the one item source outside the binary: `hmenu-xbps`, a POSIX sh
   script next to it (symlinked by `make install`) — `list` prints the
   rows, `menu name` is each row's action: a second `hmenu -p --title`
-  with the choices for the package's state, then `exec "$0" choice name`. `listapps()`
+  with the choices for the package's state, then `exec "$0" choice name`;
+  its sudo runs with `-A` and `SUDO_ASKPASS=hmenu-askpass`, a two-line
+  script around `hmenu -s`: the secret prompt (input row only, `*`s for
+  the text, no sources/fzf/fallback, implies `-p`), `secret` in hmenu.c. `listapps()`
   scans `$XDG_DATA_HOME` then `$XDG_DATA_DIRS` `applications/` dirs
   (earlier dirs shadow later ones by filename, tracked with an stb_ds
   string map); `desktopentry()` parses only the `[Desktop Entry]` group,
