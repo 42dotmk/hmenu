@@ -17,6 +17,9 @@ hmenu                 # the default modes from config.h: win, app, run
 hmenu app             # a mode by name (XDG desktop applications)
 hmenu hist            # hweb browsing history; Return opens the url in hweb,
                       # unmatched text (or Ctrl+Return) searches it in hweb
+hmenu xbps            # Void packages, installed first: [*] installed, [u]
+                      # update available, [-] not; Return asks install /
+                      # update / remove / details (hmenu-xbps, a script)
 hmenu 'ls ~/scripts'  # any command; its output lines become the items
 hmenu --title 'Which branch?' 'git branch --format=%(refname:short)'
                       # a title above the input says what the menu is for
@@ -32,6 +35,10 @@ the part after it is what runs. Two helper flags print lists in that
 shape: `hmenu -l` (open windows, activated via `hmenu -a id`) and
 `hmenu -d` (XDG desktop entries, with Exec field codes stripped,
 Terminal=true wrapped in the terminal).
+The `xbps` mode is a shell script, `hmenu-xbps`: `list` prints the
+rows, `menu name` (each row's action) opens a second hmenu with the
+choices that fit the package's state and runs the one picked in the
+terminal (`HMENU_TERMINAL`, hterm by default).
 
 Configuration is layered, weakest first: `config.h` defaults
 (recompile), `~/.config/hackable/hmenu.conf` (runtime, optional), and

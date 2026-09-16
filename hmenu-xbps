@@ -1,0 +1,65 @@
+#!/bin/sh
+# hmenu-xbps: the xbps mode of hmenu (Void packages).
+#   list          the rows: `[*] pkgver  desc<tab>hmenu-xbps menu name`,
+#                 installed packages first ([*] installed, [u] a newer
+#                 version is in the repo, [-] not installed)
+#   menu name     ask what to do with the package (a second hmenu, the
+#                 choices depend on its state) and run the choice
+#   details|install|update|remove name
+#                 the choices: details pages `xbps-query` in the terminal,
+#                 the others run xbps with sudo there (xbps asks y/N, the
+#                 terminal waits for Return before closing)
+# The terminal is HMENU_TERMINAL (hterm by default), like Shift+Return.
+set -u
+term=${HMENU_TERMINAL:-hterm}
+
+# xbps-query -Rs marks [*] only when the exact pkgver is installed, so the
+# state is computed from the installed list instead
+list() {
+    { xbps-query -l | sed 's/^/I /'; xbps-query -Rs ''; } | awk '
+        { p = $2 }
+        $1 == "I" { p = $3; sub(/-[^-]*$/, "", p); inst[p] = $3; next }
+        { sub(/-[^-]*$/, "", p); d = $0; sub(/^\[.\] [^ ]+ +/, "", d)
+          m = p in inst ? (inst[p] == $2 ? "[*]" : "[u]") : "[-]"
+          l = sprintf("%s %s  %s\thmenu-xbps menu %s", m, $2, d, p)
+          if (m == "[-]") rest[++n] = l; else print l }
+        END { for (i = 1; i <= n; i++) print rest[i] }'
+}
+
+# run a command in the terminal and keep it open until Return
+interm() {
+    exec "$term" -e sh -c "$1; echo; echo press return to close; read -r _"
+}
+
+menu() {
+    p=$1
+    local=$(xbps-query -p pkgver "$p" 2>/dev/null)
+    remote=$(xbps-query -R -p pkgver "$p" 2>/dev/null)
+    title="${remote:-$local}  $(xbps-query -R -p short_desc "$p" 2>/dev/null)"
+    if [ -z "$local" ]; then
+        choices='install\ndetails'
+    elif [ "$local" != "$remote" ]; then
+        choices='update\nremove\ndetails'
+    else
+        choices='remove\ndetails'
+    fi
+    c=$(hmenu -p --title "$title" "printf '$choices\n'") || exit 1
+    case $c in
+    install | update | remove | details) exec "$0" "$c" "$p" ;;
+    esac
+}
+
+case ${1:-} in
+list) list ;;
+menu) menu "$2" ;;
+install | update) interm "sudo xbps-install -S $2" ;;
+remove) interm "sudo xbps-remove -R $2" ;;
+details)
+    if xbps-query "$2" >/dev/null 2>&1; then q=; else q=-R; fi
+    exec "$term" -e sh -c "xbps-query $q $2 | \${PAGER:-less}"
+    ;;
+*)
+    echo "usage: hmenu-xbps list | menu|details|install|update|remove pkg" >&2
+    exit 2
+    ;;
+esac

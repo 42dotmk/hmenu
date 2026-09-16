@@ -67,6 +67,10 @@ static const struct mode {
      "printf \"%s  %s\\thweb \\\"%s\\\"\\n\", ($2 != \"\" ? $2 : $1), ($2 != "
      "\"\" ? $1 : \"\"), u }'",
      "search: %s\thweb %s"},
+    {"xbps", /* Void packages, installed first ([*] installed, [u] newer in
+              * the repo, [-] not); Return asks what to do with it (install /
+              * update / remove / details) in a second menu: hmenu-xbps */
+     "hmenu-xbps list", NULL},
     /* { "scripts", "ls -1 ~/bin" }, */
 };
 

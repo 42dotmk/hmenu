@@ -64,7 +64,11 @@ keyboard. XTEST fake keys work against the grab for scripted checks.
   refilter (avoids write/read pipe deadlocks).
 - Two helper flags print item lists in the `DISPLAY\tACTION` shape and are
   what the built-in modes run: `hmenu -l` (EWMH window list, the win mode)
-  and `hmenu -d` (XDG desktop applications, the app mode). `listapps()`
+  and `hmenu -d` (XDG desktop applications, the app mode). The `xbps` mode
+  is the one item source outside the binary: `hmenu-xbps`, a POSIX sh
+  script next to it (symlinked by `make install`) — `list` prints the
+  rows, `menu name` is each row's action: a second `hmenu -p --title`
+  with the choices for the package's state, then `exec "$0" choice name`. `listapps()`
   scans `$XDG_DATA_HOME` then `$XDG_DATA_DIRS` `applications/` dirs
   (earlier dirs shadow later ones by filename, tracked with an stb_ds
   string map); `desktopentry()` parses only the `[Desktop Entry]` group,

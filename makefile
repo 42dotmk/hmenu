@@ -20,9 +20,10 @@ hmenu: hmenu.c config.h vendor/stb_ds.h vendor/hconf.h
 install: hmenu
 	mkdir -p $(BINDIR)
 	ln -sf "$$(pwd)/hmenu" $(BINDIR)/hmenu
+	ln -sf "$$(pwd)/hmenu-xbps" $(BINDIR)/hmenu-xbps
 
 uninstall:
-	rm -f $(BINDIR)/hmenu
+	rm -f $(BINDIR)/hmenu $(BINDIR)/hmenu-xbps
 
 clean:
 	rm -f hmenu
