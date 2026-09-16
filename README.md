@@ -21,7 +21,7 @@ hmenu xbps            # Void packages, installed first: [*] installed, [u]
                       # update available, [-] not; Return asks install /
                       # update / remove / details (hmenu-xbps, a script)
 hmenu keys            # hwm's key bindings with what they do (`hwm keys`);
-                      # a cheat sheet: Return just closes it
+                      # Return runs the binding, via `hwm send`
 hmenu 'ls ~/scripts'  # any command; its output lines become the items
 hmenu --title 'Which branch?' 'git branch --format=%(refname:short)'
                       # a title above the input says what the menu is for

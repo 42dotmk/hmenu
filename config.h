@@ -71,11 +71,11 @@ static const struct mode {
               * the repo, [-] not); Return asks what to do with it (install /
               * update / remove / details) in a second menu: hmenu-xbps */
      "hmenu-xbps list", NULL},
-    {"keys", /* hwm's key bindings with what they do (`hwm keys`: key,
-              * command, description in fixed columns); just a cheat sheet,
-              * Return closes it */
-     "hwm keys | awk '{ printf \"%s %s\\t:\\n\", substr($0, 1, 24), "
-     "substr($0, 62) }'",
+    {"keys", /* hwm's key bindings with what they do (`hwm keys`: key, command,
+              * description, tab-separated); Return runs the binding's
+              * command through `hwm send`, the same path as the key */
+     "hwm keys | awk -F'\\t' '{ printf \"%-24s %s\\t%s\\n\", $1, $3, "
+     "$2 == \"\" ? \":\" : \"hwm send \" $2 }'",
      NULL},
     /* { "scripts", "ls -1 ~/bin" }, */
 };
