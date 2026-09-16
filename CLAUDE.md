@@ -21,7 +21,10 @@ kept, long lines word-wrapped to the menu width, lines dropped from the
 end if the window would not fit the monitor); without it the layout is
 unchanged. `-p` makes `execline()` print the whole chosen line (display
 and action part, tab included) to stdout instead of running it, so a
-script can `$(hmenu -p ...)`; Escape still exits 1.
+script can `$(hmenu -p ...)`; Escape still exits 1. `--refresh N` makes
+`run()` wait with `select()` on the X connection and, when N seconds pass
+without an event, `reload()`: every source again through `loadall()`
+(`sources[]` keeps the arguments), refiltered with the selection kept.
 
 Configuration is layered (see `loadconfig()`), weakest first:
 
@@ -77,10 +80,13 @@ keyboard. XTEST fake keys work against the grab for scripted checks.
   the text, no sources/fzf/fallback, implies `-p`), `secret` in hmenu.c.
   The `pass` mode is `hmenu-pass` in the same shape: `list` rows carry
   a third field, so Return copies the password and Shift+Return runs
-  `menu name` — a `-p` chooser of the entry's lines (password, otp via
-  pass-otp, fields, edit) fed through stdin (`hmenu -p cat`, the list
-  command inherits hmenu's stdin); the mode's fallback is `new name`,
-  a template in `$EDITOR` then `pass insert`. `listapps()`
+  `menu name` — a `-p` chooser of the entry's lines (password, otp,
+  fields, edit): the entry is decrypted once, before hmenu opens, and
+  handed to the list command `hmenu-pass rows` in `HMENU_PASS_ENTRY`;
+  with an `otpauth://` line the chooser runs `--refresh 1` and `rows`
+  computes the code with oathtool from the uri, so the row ticks without
+  gpg. The mode's fallback is `new name`, a template in `$EDITOR` then
+  `pass insert`. `listapps()`
   scans `$XDG_DATA_HOME` then `$XDG_DATA_DIRS` `applications/` dirs
   (earlier dirs shadow later ones by filename, tracked with an stb_ds
   string map); `desktopentry()` parses only the `[Desktop Entry]` group,

@@ -40,6 +40,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -88,8 +89,11 @@ static char *titlebuf;                /* stb_ds char array: its lines */
 static int *tlines;                   /* stb_ds: line offsets in titlebuf */
 static int titleh;                    /* the title block height, 0 without */
 static int printmode;                 /* -p: print the choice, don't run */
-static int secret;                    /* -s: password prompt, implies -p */
+static unsigned int refresh; /* --refresh N: rerun the sources every N s */
+static const char **sources; /* stb_ds: the arguments the list came from */
+static int secret;           /* -s: password prompt, implies -p */
 static void shquote(char *dst, size_t size, const char *s);
+static void loadall(void);
 
 /* the mode's fallback line for this query (the template's display part
  * gets the query as typed, the action part gets it shell-quoted): shown as
@@ -128,10 +132,11 @@ static void die(const char *msg) {
 static void usage(void) {
     size_t i;
 
-    fputs("usage: hmenu [-p] [--title text] [mode|listcmd]...\n"
-          "       hmenu -s [--title text]\n"
-          "       hmenu -l | -d | -a windowid | -v | --check\nmodes:",
-          stderr);
+    fputs(
+        "usage: hmenu [-p] [--title text] [--refresh secs] [mode|listcmd]...\n"
+        "       hmenu -s [--title text]\n"
+        "       hmenu -l | -d | -a windowid | -v | --check\nmodes:",
+        stderr);
     for (i = 0; i < (size_t)arrlen(allmodes); i++)
         fprintf(stderr, " %s", allmodes[i].name);
     fputs("\n", stderr);
@@ -793,11 +798,36 @@ static void setup(void) {
     grabkb();
 }
 
+/* --refresh: the sources again, the selection kept where it was */
+static void reload(void) {
+    int s = sel, o = off;
+
+    loadall();
+    filter();
+    sel = s;
+    off = o;
+    drawmenu();
+}
+
 static void run(void) {
     XEvent ev;
+    fd_set fds;
+    struct timeval tv;
+    int xfd = ConnectionNumber(dpy);
 
     drawmenu();
-    while (running && !XNextEvent(dpy, &ev)) {
+    while (running) {
+        if (refresh && !XPending(dpy)) { /* wait for X or the timer */
+            FD_ZERO(&fds);
+            FD_SET(xfd, &fds);
+            tv.tv_sec = refresh;
+            tv.tv_usec = 0;
+            if (!select(xfd + 1, &fds, NULL, NULL, &tv)) {
+                reload();
+                continue;
+            }
+        }
+        XNextEvent(dpy, &ev);
         if (XFilterEvent(&ev, None))
             continue;
         switch (ev.type) {
@@ -1030,8 +1060,24 @@ static void loadsource(const char *arg) {
     loadlist(arg);
 }
 
+/* (re)load the list from every source, in order: the raw text into
+ * listbuf and listfile, its lines into items */
+static void loadall(void) {
+    int a;
+
+    arrsetlen(listbuf, 0);
+    arrsetlen(items, 0);
+    if (listfile &&
+        (fseek(listfile, 0L, SEEK_SET) || ftruncate(fileno(listfile), 0)))
+        die("hmenu: cannot rewind the list\n");
+    for (a = 0; a < (int)arrlen(sources); a++)
+        loadsource(sources[a]);
+    arrput(listbuf, '\0');
+    splitlines(listbuf, &items);
+}
+
 int main(int argc, char *argv[]) {
-    int a, nsrc = 0;
+    int a;
 
     setlocale(LC_CTYPE, "");
     loadconfig();
@@ -1062,18 +1108,16 @@ int main(int argc, char *argv[]) {
             printmode = 1;
         else if (!strcmp(argv[a], "-s"))
             secret = printmode = 1;
-        else {
-            loadsource(argv[a]);
-            nsrc++;
-        }
-    if (secret) { /* no items, no fallback: the typed text is the answer */
-        arrsetlen(listbuf, 0);
+        else if (!strcmp(argv[a], "--refresh") && a + 1 < argc)
+            refresh = (unsigned int)strtoul(argv[++a], NULL, 10);
+        else
+            arrput(sources, argv[a]);
+    if (secret) /* no items, no fallback: the typed text is the answer */
         fallback = NULL;
-    } else if (!nsrc)
+    else if (!arrlen(sources))
         for (a = 0; a < (int)arrlen(runargs); a++)
-            loadsource(runargs[a]);
-    arrput(listbuf, '\0');
-    splitlines(listbuf, &items);
+            arrput(sources, runargs[a]);
+    loadall();
     setup();
     filter();
     run();

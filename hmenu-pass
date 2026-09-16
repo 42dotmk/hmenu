@@ -9,6 +9,9 @@
 #                 it lasts), every `key: value` field with its value shown
 #                 (values of pass/pin/secret/token keys hidden) — or edit,
 #                 the whole entry in $EDITOR (`pass edit`)
+#   rows          the chooser's rows, from the entry in HMENU_PASS_ENTRY
+#                 (rerun by hmenu --refresh 1 while an otp counts down;
+#                 the code comes from oathtool, no gpg on that path)
 #   copy name N   copy line N of the entry (`pass show -cN`, cleared after
 #                 45 s like pass -c); N = otp copies the current code
 #   edit name     `pass edit name` in the terminal
@@ -16,8 +19,9 @@
 #                 terminal, saved with `pass insert` (the mode's fallback,
 #                 so an unmatched name typed into the list creates it)
 # The terminal is HMENU_TERMINAL (hterm by default), like Shift+Return.
-# The entry is decrypted before any hmenu opens, so gpg's pinentry never
-# has to fight hmenu's keyboard grab.
+# The entry is decrypted once, before any hmenu opens (so gpg's pinentry
+# never has to fight hmenu's keyboard grab), and handed to the chooser's
+# list command in its environment.
 set -u
 term=${HMENU_TERMINAL:-hterm}
 store=${PASSWORD_STORE_DIR:-$HOME/.password-store}
@@ -84,9 +88,11 @@ copy() {
 }
 
 # the rows: `label<tab>N` (N a line number, otp, or edit); values of
-# secret-looking keys are not shown; $1 is the current otp code, if any
+# secret-looking keys are not shown
 rows() {
-    awk -v key="$key" -v otp="$1" '
+    e=$HMENU_PASS_ENTRY
+    case $e in *otpauth://*) otp=$(otpcode "$e") ;; *) otp= ;; esac
+    printf '%s\n' "$e" | awk -v key="$key" -v otp="$otp" '
         NR == 1 { print "password\t1"; next }
         /^otpauth:\/\// { print (otp == "" ? "otp" : "otp  " otp) "\totp"; next }
         /^[ \t]*$/ { next }
@@ -97,19 +103,35 @@ rows() {
         END { print "edit\tedit" }'
 }
 
-# the current code and the seconds it is still valid (period= in the
-# otpauth uri, 30 by default), e.g. `123456  (17s)`
+# the current code of the entry's otpauth:// uri and the seconds it is
+# still valid, e.g. `123456  (17s)`: oathtool on the uri's parameters,
+# the way pass-otp computes it
 otpcode() {
-    code=$(pass otp code "$1" 2>/dev/null) || return
-    period=$(printf '%s\n' "$2" | sed -n 's/.*[?&]period=\([0-9]*\).*/\1/p')
-    echo "$code  ($((${period:-30} - $(date +%s) % ${period:-30}))s)"
+    uri=${1#*otpauth://}
+    uri=${uri%%
+*}
+    secret= digits= algo= period=30
+    IFS='&'
+    for kv in ${uri#*\?}; do
+        case $kv in
+        secret=*) secret=${kv#*=} ;;
+        digits=*) digits="-d ${kv#*=}" ;;
+        period=*) period=${kv#*=} ;;
+        algorithm=*) algo=$(echo "${kv#*=}" | tr A-Z a-z) ;;
+        esac
+    done
+    unset IFS
+    code=$(oathtool -b --totp${algo:+=$algo} $digits -s "$period" "$secret" \
+        2>/dev/null) || return
+    echo "$code  ($((period - $(date +%s) % period))s)"
 }
 
 menu() {
     p=$1
     e=$(pass show "$p") || exit 1
-    case $e in *otpauth://*) otp=$(otpcode "$p" "$e") ;; *) otp= ;; esac
-    c=$(printf '%s\n' "$e" | rows "$otp" | hmenu -p --title "$p" cat) || exit 1
+    case $e in *otpauth://*) r="--refresh 1" ;; *) r= ;; esac
+    c=$(HMENU_PASS_ENTRY=$e hmenu -p --title "$p" $r "hmenu-pass rows") ||
+        exit 1
     a=${c##*	}
     case $a in
     edit) interm pass edit "$p" ;;
@@ -132,12 +154,13 @@ insert() {
 case ${1:-} in
 list) list ;;
 menu) menu "$2" ;;
+rows) rows ;;
 copy) copy "$2" "$3" ;;
 edit) interm pass edit "$2" ;;
 new) [ -e "$store/$2.gpg" ] && exec "$0" menu "$2"; interm "$0" insert "$2" ;;
 insert) insert "$2" ;;
 *)
-    echo "usage: hmenu-pass list | menu|edit|new name | copy name N" >&2
+    echo "usage: hmenu-pass list | rows | menu|edit|new name | copy name N" >&2
     exit 2
     ;;
 esac

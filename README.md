@@ -36,6 +36,9 @@ b=$(hmenu -p 'git branch --format=%(refname:short)')
 pw=$(hmenu -s --title 'Password:')
                       # -s: a secret prompt — the input row only, typed
                       # text shown as *s, Return prints it (implies -p)
+hmenu --refresh 2 'ps -eo pid,comm --sort=-%cpu | tail -n +2'
+                      # --refresh N reruns the list commands every N
+                      # seconds; the query and the selection stay
 ```
 
 An item line may contain a tab: the part before it is shown and matched,
@@ -57,8 +60,10 @@ the askpass with `-A` or when it has no tty.
 The `pass` mode is `hmenu-pass`: Return copies the password (`pass
 show -c`, cleared after 45 s), Shift+Return opens a chooser for the
 entry — `password`, `otp` (an `otpauth://` line, pass-otp's convention;
-the row shows the current code and its remaining seconds, `pass otp -c`
-copies it), each `key: value` field with its value shown (copied
+the row shows the current code and its remaining seconds, ticking —
+the chooser runs with `--refresh 1` and computes the code with oathtool
+from the entry it was handed, no gpg on that path; `pass otp -c` copies
+it), each `key: value` field with its value shown (copied
 without the key), and `edit` (`pass edit` in the terminal, so `$EDITOR`). A name
 that matches nothing (or Ctrl+Return) creates that entry: a template
 with a generated password in `$EDITOR`, saved by `pass insert`.
