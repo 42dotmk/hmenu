@@ -104,7 +104,10 @@ keyboard. XTEST fake keys work against the grab for scripted checks.
 - `keypress()` uses `Xutf8LookupString` (XIM when available) for text
   input; editing is utf8-aware with a movable cursor (readline-ish keys:
   C-a/C-e/C-u/C-w, arrows, Home/End). Up/Down/Tab/C-p/C-n move the
-  selection, PgUp/PgDn by a page.
+  selection, PgUp/PgDn by a page. C-v pastes the CLIPBOARD, C-y and
+  Shift+Insert the PRIMARY selection: `paste()` asks the owner for
+  `UTF8_STRING`, the `SelectionNotify` handler `pasted()` inserts the
+  reply up to its first newline (the input is one line).
 - `drawmenu()` renders everything into a backbuffer pixmap with Xft and
   copies it over on each change; the input scrolls horizontally so the
   caret stays visible, long items are truncated at utf8 boundaries.

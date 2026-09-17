@@ -568,6 +568,36 @@ static void delete(int from, int to) {
     cursor = from;
 }
 
+/* ask the selection owner for utf8 text; SelectionNotify inserts it */
+static void paste(Atom sel) {
+    Atom utf8 = XInternAtom(dpy, "UTF8_STRING", False);
+
+    XConvertSelection(dpy, sel, utf8, utf8, win, CurrentTime);
+}
+
+static void pasted(XSelectionEvent *ev) {
+    Atom real;
+    int fmt;
+    unsigned long n, extra;
+    unsigned char *p = NULL;
+    char *nl;
+
+    if (ev->property == None)
+        return;
+    if (XGetWindowProperty(dpy, win, ev->property, 0, sizeof(input), True,
+                           AnyPropertyType, &real, &fmt, &n, &extra,
+                           &p) != Success ||
+        !p)
+        return;
+    if (fmt == 8 && n > 0) { /* one line of input: cut at a newline */
+        nl = memchr(p, '\n', n);
+        insert((char *)p, nl ? (int)(nl - (char *)p) : (int)n);
+        filter();
+        drawmenu();
+    }
+    XFree(p);
+}
+
 static void keypress(XKeyEvent *ev) {
     char kb[64];
     KeySym sym = NoSymbol;
@@ -608,6 +638,13 @@ static void keypress(XKeyEvent *ev) {
         case XK_c:
         case XK_g:
             exit(1);
+        case XK_v: /* Ctrl+V pastes the clipboard, Ctrl+Y the primary */
+        case XK_V:
+            paste(XInternAtom(dpy, "CLIPBOARD", False));
+            return;
+        case XK_y:
+            paste(XA_PRIMARY);
+            return;
         case XK_Return:
         case XK_KP_Enter:
             if (fbline[0])
@@ -667,6 +704,10 @@ static void keypress(XKeyEvent *ev) {
         case XK_Next:
             sel += (int)lines;
             break;
+        case XK_Insert: /* Shift+Insert pastes the primary selection */
+            if (ev->state & ShiftMask)
+                paste(XA_PRIMARY);
+            return;
         default:
             if (n > 0 && !iscntrl((unsigned char)kb[0]) &&
                 (!xic || st == XLookupChars || st == XLookupBoth)) {
@@ -837,6 +878,9 @@ static void run(void) {
             break;
         case KeyPress:
             keypress(&ev.xkey);
+            break;
+        case SelectionNotify:
+            pasted(&ev.xselection);
             break;
         case VisibilityNotify:
             if (ev.xvisibility.state != VisibilityUnobscured)
