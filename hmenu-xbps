@@ -11,10 +11,11 @@
 #                 terminal waits for Return before closing)
 # The terminal is HMENU_TERMINAL (hterm by default), like Shift+Return;
 # sudo asks for the password through SUDO_ASKPASS (hmenu-askpass unless
-# the session set another), so the prompt is an hmenu too.
+# the session set another), so the prompt is an hmenu too. sudo does not
+# search PATH for it: the name alone fails with "unable to run".
 set -u
 term=${HMENU_TERMINAL:-hterm}
-export SUDO_ASKPASS=${SUDO_ASKPASS:-hmenu-askpass}
+export SUDO_ASKPASS=${SUDO_ASKPASS:-$(command -v hmenu-askpass)}
 
 # xbps-query -Rs marks [*] only when the exact pkgver is installed, so the
 # state is computed from the installed list instead
